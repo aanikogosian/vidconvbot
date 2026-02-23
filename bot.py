@@ -37,6 +37,7 @@ class ProgressReporter:
         self.min_interval_sec = min_interval_sec
         self._last_update_ts = 0.0
         self._last_text = ""
+        self._fallback_reply_used = False
 
     async def update(self, text: str, force: bool = False) -> None:
         now = time.monotonic()
@@ -51,7 +52,16 @@ class ProgressReporter:
             self._last_update_ts = now
             self._last_text = text
         except Exception as exc:  # noqa: BLE001
-            logger.debug("Cannot update progress message: %s", exc)
+            logger.debug("Cannot update progress message via edit_text: %s", exc)
+            # Fallback: in some chats/clients editing may fail or be invisible,
+            # then send progress as normal bot messages.
+            try:
+                await self.message.reply_text(text)
+                self._last_update_ts = now
+                self._last_text = text
+                self._fallback_reply_used = True
+            except Exception as nested_exc:  # noqa: BLE001
+                logger.debug("Cannot send fallback progress message: %s", nested_exc)
 
 
 def _probe_duration_seconds(video_path: Path) -> float:

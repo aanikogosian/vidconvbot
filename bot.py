@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -20,6 +21,7 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 MAX_OUTPUT_MB = float(os.getenv("MAX_OUTPUT_MB", "10"))
 MAX_OUTPUT_BYTES = int(MAX_OUTPUT_MB * 1024 * 1024)
 WORKDIR = Path(os.getenv("WORKDIR", "./tmp")).resolve()
+STALE_TMP_MAX_AGE_HOURS = int(os.getenv("STALE_TMP_MAX_AGE_HOURS", "24"))
 
 URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 PERCENT_RE = re.compile(r"(\d{1,3}(?:\.\d+)?)%")
@@ -29,6 +31,31 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger("vidconvbot")
+
+
+def _cleanup_stale_tempdirs(workdir: Path, max_age_hours: int) -> None:
+    if not workdir.exists():
+        return
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    for child in workdir.iterdir():
+        if not child.is_dir():
+            continue
+        try:
+            modified = datetime.fromtimestamp(child.stat().st_mtime, tz=timezone.utc)
+        except OSError:
+            continue
+        if modified < cutoff:
+            shutil.rmtree(child, ignore_errors=True)
+
+
+def _cleanup_files_in_dir(dir_path: Path) -> None:
+    for child in dir_path.iterdir():
+        if child.is_file():
+            try:
+                child.unlink()
+            except OSError:
+                logger.warning("Cannot remove temporary file: %s", child)
 
 
 class ProgressReporter:
@@ -296,6 +323,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     progress = ProgressReporter(status_message)
 
     WORKDIR.mkdir(parents=True, exist_ok=True)
+    _cleanup_stale_tempdirs(WORKDIR, STALE_TMP_MAX_AGE_HOURS)
     with tempfile.TemporaryDirectory(dir=WORKDIR) as tmp:
         tmp_dir = Path(tmp)
 
@@ -336,6 +364,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     filename="compressed.mp4",
                     caption=f"Готово ✅ Размер: {final_size_mb:.2f} МБ",
                 )
+
+            # Extra cleanup right after successful send.
+            _cleanup_files_in_dir(tmp_dir)
             await progress.update("✅ Готово! Видео отправлено файлом.", force=True)
 
         except RuntimeError as exc:
@@ -350,6 +381,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception as exc:  # noqa: BLE001
             logger.exception("Unhandled error: %s", exc)
             await progress.update("❌ Произошла непредвиденная ошибка. Попробуйте позже.", force=True)
+        finally:
+            _cleanup_files_in_dir(tmp_dir)
 
 
 def _ensure_deps() -> None:

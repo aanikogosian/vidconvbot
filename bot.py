@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -122,13 +123,22 @@ def _looks_like_url(text: str) -> bool:
 def _download_from_url(url: str, dst_dir: Path) -> Path:
     output_tpl = str(dst_dir / "source.%(ext)s")
     cmd = [
-        "yt-dlp",
+        sys.executable,
+        "-m",
+        "yt_dlp",
         "--no-playlist",
         "-o",
         output_tpl,
         url,
     ]
-    _run(cmd)
+
+    try:
+        _run(cmd)
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.decode("utf-8", errors="ignore") if isinstance(exc.stderr, (bytes, bytearray)) else str(exc.stderr)
+        if "No module named yt_dlp" in stderr:
+            raise RuntimeError("Не установлен Python-пакет yt-dlp. Выполните: pip install -r requirements.txt") from exc
+        raise
 
     downloaded = sorted(dst_dir.glob("source.*"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not downloaded:
@@ -229,7 +239,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 def _ensure_deps() -> None:
-    for dep in ["ffmpeg", "ffprobe", "yt-dlp"]:
+    for dep in ["ffmpeg", "ffprobe"]:
         if shutil.which(dep) is None:
             raise RuntimeError(f"Требуется установленная утилита: {dep}")
 

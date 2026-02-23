@@ -4,7 +4,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -123,9 +122,7 @@ def _looks_like_url(text: str) -> bool:
 def _download_from_url(url: str, dst_dir: Path) -> Path:
     output_tpl = str(dst_dir / "source.%(ext)s")
     cmd = [
-        sys.executable,
-        "-m",
-        "yt_dlp",
+        "yt-dlp",
         "--no-playlist",
         "-o",
         output_tpl,
@@ -232,14 +229,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 def _ensure_deps() -> None:
-    for dep in ["ffmpeg", "ffprobe"]:
+    for dep in ["ffmpeg", "ffprobe", "yt-dlp"]:
         if shutil.which(dep) is None:
             raise RuntimeError(f"Требуется установленная утилита: {dep}")
-
-    try:
-        __import__("yt_dlp")
-    except ImportError as exc:
-        raise RuntimeError("Требуется Python-пакет yt-dlp (pip install -r requirements.txt)") from exc
 
 
 def main() -> None:

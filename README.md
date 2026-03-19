@@ -92,6 +92,9 @@ TELEGRAM_BASE_FILE_URL=http://127.0.0.1:8081/file/bot
 systemctl restart vidconvbot
 ```
 
+Если `TELEGRAM_BASE_URL` / `TELEGRAM_BASE_FILE_URL` заданы, но локальный Bot API server недоступен,
+бот теперь автоматически пишет это в лог и переключается обратно на обычный cloud Bot API, чтобы сервис не падал при старте.
+
 ## Если сервис падает с ошибкой про `yt-dlp` в systemd
 
 Если при ручном запуске всё работает, а в `systemd` падает с `RuntimeError: Требуется установленная утилита: yt-dlp`,

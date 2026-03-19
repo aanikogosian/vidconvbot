@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from telegram import Message, Update
-from telegram.error import BadRequest
+from telegram.error import BadRequest, NetworkError
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 load_dotenv()
@@ -412,23 +412,40 @@ def _ensure_deps() -> None:
             raise RuntimeError(f"Требуется установленная утилита: {dep}")
 
 
-def main() -> None:
-    if not TOKEN:
-        raise RuntimeError("Не задан TELEGRAM_BOT_TOKEN в переменных окружения")
-    _ensure_deps()
-
+def _build_application(use_custom_api: bool = True) -> Application:
     builder = Application.builder().token(TOKEN)
-    if TELEGRAM_BASE_URL:
+    if use_custom_api and TELEGRAM_BASE_URL:
         builder = builder.base_url(TELEGRAM_BASE_URL)
-    if TELEGRAM_BASE_FILE_URL:
+    if use_custom_api and TELEGRAM_BASE_FILE_URL:
         builder = builder.base_file_url(TELEGRAM_BASE_FILE_URL)
 
     app = builder.build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT | filters.VIDEO | filters.Document.ALL, handle_message))
+    return app
 
-    logger.info("Bot started")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+def main() -> None:
+    if not TOKEN:
+        raise RuntimeError("Не задан TELEGRAM_BOT_TOKEN в переменных окружения")
+    _ensure_deps()
+
+    use_custom_api = bool(TELEGRAM_BASE_URL or TELEGRAM_BASE_FILE_URL)
+    app = _build_application(use_custom_api=use_custom_api)
+
+    try:
+        logger.info("Bot started")
+        app.run_polling(allowed_updates=Update.ALL_TYPES)
+    except NetworkError:
+        if not use_custom_api:
+            raise
+
+        logger.exception(
+            "Cannot connect to custom Telegram Bot API endpoint. Falling back to the default cloud Bot API."
+        )
+        fallback_app = _build_application(use_custom_api=False)
+        logger.info("Bot restarted with default Telegram cloud Bot API")
+        fallback_app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":

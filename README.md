@@ -111,6 +111,14 @@ chmod +x scripts/install_local_bot_api.sh
 ./scripts/install_local_bot_api.sh 123456 abcdef1234567890 8081
 ```
 
+Если сервер небольшой и сборка падает с ошибкой вида `Killed signal terminated program cc1plus`,
+запусти сборку в один поток:
+
+```bash
+cd /workspace/vidconvbot
+TELEGRAM_BOT_API_BUILD_JOBS=1 ./scripts/install_local_bot_api.sh 123456 abcdef1234567890 8081
+```
+
 Что делает скрипт:
 
 1. ставит build-зависимости;

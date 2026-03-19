@@ -21,6 +21,9 @@ This script will:
   4. Create /etc/telegram-bot-api/local.env with your API credentials.
   5. Create and enable systemd service telegram-bot-api.service.
 
+Optional:
+  TELEGRAM_BOT_API_BUILD_JOBS=1 ./scripts/install_local_bot_api.sh <api_id> <api_hash> [http_port]
+
 After that, set these values in your bot .env:
   TELEGRAM_BASE_URL=http://127.0.0.1:8081/bot
   TELEGRAM_BASE_FILE_URL=http://127.0.0.1:8081/file/bot
@@ -34,6 +37,7 @@ fi
 API_ID="$1"
 API_HASH="$2"
 HTTP_PORT="${3:-8081}"
+BUILD_JOBS="${TELEGRAM_BOT_API_BUILD_JOBS:-1}"
 
 SRC_DIR="/opt/telegram-bot-api-src"
 BUILD_DIR="${SRC_DIR}/build"
@@ -64,7 +68,8 @@ fi
 echo "[3/7] Building telegram-bot-api..."
 mkdir -p "${BUILD_DIR}"
 cmake -S "${SRC_DIR}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
-cmake --build "${BUILD_DIR}" --target install -j"$(nproc)"
+echo "Using ${BUILD_JOBS} build job(s). Override with TELEGRAM_BOT_API_BUILD_JOBS if needed."
+cmake --build "${BUILD_DIR}" --target install -j"${BUILD_JOBS}"
 
 echo "[4/7] Preparing directories..."
 mkdir -p "${WORK_DIR}" "${ENV_DIR}"

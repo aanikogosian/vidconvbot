@@ -95,6 +95,50 @@ systemctl restart vidconvbot
 Если `TELEGRAM_BASE_URL` / `TELEGRAM_BASE_FILE_URL` заданы, но локальный Bot API server недоступен,
 бот теперь автоматически пишет это в лог и переключается обратно на обычный cloud Bot API, чтобы сервис не падал при старте.
 
+### Быстрый способ развернуть локальный Bot API server из этого проекта
+
+В проект уже добавлен готовый скрипт:
+
+```bash
+scripts/install_local_bot_api.sh <api_id> <api_hash> [http_port]
+```
+
+Пример:
+
+```bash
+cd /workspace/vidconvbot
+chmod +x scripts/install_local_bot_api.sh
+./scripts/install_local_bot_api.sh 123456 abcdef1234567890 8081
+```
+
+Что делает скрипт:
+
+1. ставит build-зависимости;
+2. клонирует официальный `tdlib/telegram-bot-api`;
+3. собирает и ставит бинарник `telegram-bot-api` в `/usr/local/bin/telegram-bot-api`;
+4. создает `/etc/telegram-bot-api/local.env`;
+5. создает и запускает `telegram-bot-api.service`.
+
+После этого:
+
+1. вызови у облачного Bot API метод `logOut` для своего бота;
+2. пропиши в `.env` бота:
+
+```env
+TELEGRAM_BASE_URL=http://127.0.0.1:8081/bot
+TELEGRAM_BASE_FILE_URL=http://127.0.0.1:8081/file/bot
+```
+
+3. перезапусти бота:
+
+```bash
+systemctl restart vidconvbot
+```
+
+Где взять `api_id` и `api_hash`:
+
+- они берутся на https://my.telegram.org в разделе **API development tools**.
+
 ## Если сервис падает с ошибкой про `yt-dlp` в systemd
 
 Если при ручном запуске всё работает, а в `systemd` падает с `RuntimeError: Требуется установленная утилита: yt-dlp`,

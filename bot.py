@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from telegram import Message, Update
+from telegram.error import BadRequest
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 load_dotenv()
@@ -22,6 +23,8 @@ MAX_OUTPUT_MB = float(os.getenv("MAX_OUTPUT_MB", "10"))
 MAX_OUTPUT_BYTES = int(MAX_OUTPUT_MB * 1024 * 1024)
 WORKDIR = Path(os.getenv("WORKDIR", "./tmp")).resolve()
 STALE_TMP_MAX_AGE_HOURS = int(os.getenv("STALE_TMP_MAX_AGE_HOURS", "24"))
+TELEGRAM_BASE_URL = os.getenv("TELEGRAM_BASE_URL", "").strip()
+TELEGRAM_BASE_FILE_URL = os.getenv("TELEGRAM_BASE_FILE_URL", "").strip()
 
 URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 PERCENT_RE = re.compile(r"(\d{1,3}(?:\.\d+)?)%")
@@ -297,7 +300,16 @@ async def _download_telegram_media(message: Message, dst_dir: Path, progress: Pr
         await progress.update("📥 Скачивание файла из Telegram: 0%", force=True)
         ext = ".mp4"
         target = dst_dir / f"telegram_video{ext}"
-        tg_file = await message.video.get_file()
+        try:
+            tg_file = await message.video.get_file()
+        except BadRequest as exc:
+            if "File is too big" in str(exc):
+                raise RuntimeError(
+                    "Telegram cloud Bot API не дает скачать такой большой файл. "
+                    "Чтобы принимать большие видео из Telegram, нужно подключить локальный Telegram Bot API server "
+                    "через TELEGRAM_BASE_URL и TELEGRAM_BASE_FILE_URL."
+                ) from exc
+            raise
         await tg_file.download_to_drive(custom_path=str(target))
         await progress.update("📥 Скачивание файла из Telegram: 100%", force=True)
         return target
@@ -306,7 +318,16 @@ async def _download_telegram_media(message: Message, dst_dir: Path, progress: Pr
         await progress.update("📥 Скачивание файла из Telegram: 0%", force=True)
         suffix = Path(message.document.file_name or "video.mp4").suffix or ".mp4"
         target = dst_dir / f"telegram_document{suffix}"
-        tg_file = await message.document.get_file()
+        try:
+            tg_file = await message.document.get_file()
+        except BadRequest as exc:
+            if "File is too big" in str(exc):
+                raise RuntimeError(
+                    "Telegram cloud Bot API не дает скачать такой большой файл. "
+                    "Чтобы принимать большие видео из Telegram, нужно подключить локальный Telegram Bot API server "
+                    "через TELEGRAM_BASE_URL и TELEGRAM_BASE_FILE_URL."
+                ) from exc
+            raise
         await tg_file.download_to_drive(custom_path=str(target))
         await progress.update("📥 Скачивание файла из Telegram: 100%", force=True)
         return target
@@ -396,7 +417,13 @@ def main() -> None:
         raise RuntimeError("Не задан TELEGRAM_BOT_TOKEN в переменных окружения")
     _ensure_deps()
 
-    app = Application.builder().token(TOKEN).build()
+    builder = Application.builder().token(TOKEN)
+    if TELEGRAM_BASE_URL:
+        builder = builder.base_url(TELEGRAM_BASE_URL)
+    if TELEGRAM_BASE_FILE_URL:
+        builder = builder.base_file_url(TELEGRAM_BASE_FILE_URL)
+
+    app = builder.build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT | filters.VIDEO | filters.Document.ALL, handle_message))
 
